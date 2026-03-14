@@ -248,10 +248,6 @@ jobs:
           fi
 
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          ref: main
-          fetch-depth: 0
-          token: ${{ secrets.PAT }}
 
       - name: Install uv
         uses: astral-sh/setup-uv@5a095e7a2014a4212f075830d4f7277575a9d098 # v7.3.1
@@ -266,36 +262,8 @@ jobs:
 
       - name: Extract release notes from CHANGELOG
         id: release-notes
-        shell: python
-        run: |
-          import os, re
-
-          with open("CHANGELOG.md") as f:
-              content = f.read()
-
-          # Extract everything between "## Unreleased" and the next "## " heading
-          match = re.search(
-              r"^## Unreleased\n(.*?)(?=^## |\Z)",
-              content,
-              re.MULTILINE | re.DOTALL,
-          )
-          notes = ""
-          if match:
-              lines = match.group(1).strip().splitlines()
-              # Remove PR markers and blank lines
-              lines = [l for l in lines if not l.startswith("<!-- PR #")]
-              notes = "\n".join(lines).strip()
-
-          if not notes:
-              notes = "No changes documented."
-
-          with open(os.environ["GITHUB_OUTPUT"], "a") as f:
-              f.write(f"notes<<NOTES_EOF\n{notes}\nNOTES_EOF\n")
-
-      - name: Update CHANGELOG for release
         env:
           VERSION: ${{ steps.version.outputs.value }}
-          GH_TOKEN: ${{ secrets.PAT }}
         shell: python
         run: |
           import os, re
@@ -305,30 +273,20 @@ jobs:
           with open("CHANGELOG.md") as f:
               content = f.read()
 
-          # Remove PR markers
-          content = re.sub(r"<!-- PR #\d+ -->\n?", "", content)
+          # Extract everything under "## X.Y.Z" section
+          pattern = rf"^## {re.escape(version)}\n(.*?)(?=^## |\Z)"
+          match = re.search(pattern, content, re.MULTILINE | re.DOTALL)
+          notes = ""
+          if match:
+              lines = match.group(1).strip().splitlines()
+              lines = [l for l in lines if not l.startswith("<!-- PR #")]
+              notes = "\n".join(lines).strip()
 
-          # Replace "## Unreleased" with "## Unreleased\n\n## vX.Y.Z"
-          content = content.replace(
-              "## Unreleased",
-              f"## Unreleased\n\n## v{version}",
-              1,
-          )
+          if not notes:
+              notes = "No changes documented."
 
-          with open("CHANGELOG.md", "w") as f:
-              f.write(content)
-
-      - name: Push CHANGELOG update
-        env:
-          VERSION: ${{ steps.version.outputs.value }}
-          GH_TOKEN: ${{ secrets.PAT }}
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add CHANGELOG.md
-          git diff --cached --quiet && exit 0
-          git commit -m "changelog: release v$VERSION"
-          git push
+          with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+              f.write(f"notes<<NOTES_EOF\n{notes}\nNOTES_EOF\n")
 
       - name: Create GitHub Release
         env:
@@ -356,15 +314,33 @@ jobs:
             https://readthedocs.org/api/v3/projects/dature/versions/latest/builds/
 
   trigger-rtd-tag:
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
+    needs: [tag]
+    if: >-
+      always()
+      && !failure()
+      && !cancelled()
+      && (
+        (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/'))
+        || needs.tag.outputs.tagged == 'true'
+      )
     runs-on: ubuntu-latest
     steps:
+      - name: Determine tag
+        id: tag-name
+        env:
+          TAG_VERSION: ${{ needs.tag.outputs.version }}
+        run: |
+          if [ -n "$TAG_VERSION" ]; then
+            echo "value=v$TAG_VERSION" >> "$GITHUB_OUTPUT"
+          else
+            echo "value=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Sync versions and activate tag
         env:
           RTD_API_TOKEN: ${{ secrets.RTD_API_TOKEN }}
+          TAG: ${{ steps.tag-name.outputs.value }}
         run: |
-          TAG="${GITHUB_REF#refs/tags/}"
-
           curl -X POST \
             -H "Authorization: Token $RTD_API_TOKEN" \
             https://readthedocs.org/api/v3/projects/dature/sync-versions/
