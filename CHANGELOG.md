@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+<!-- PR #50 -->
+### Improvements
+- Refactored error handling in the exceptions module to provide clearer messages.
+- Enhanced the sources loader to improve performance and reliability.
+- Updated validation examples to demonstrate new features and best practices.
+- Improved error handling in the loading module to prevent crashes on invalid inputs.
+
+### Fixes
+- Resolved issues with error reporting in the validation module.
+- Fixed bugs in the masking examples to ensure accurate functionality.
+- Corrected various test cases to improve coverage and reliability.
+- Addressed errors in the source loading process to enhance stability.
+- Fixed errors related to loading configurations from different sources.
+<!-- PR #50 -->
+
 ## 0.13.0
 
 ### Features
