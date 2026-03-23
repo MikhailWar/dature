@@ -118,8 +118,16 @@ plugins:
           - api-reference.md
           - changelog.md
 
+extra:
+  version:
+    provider: mike
+    default: stable
+
 extra_css:
   - stylesheets/extra.css
+
+extra_javascript:
+  - javascript/readthedocs.js
 
 markdown_extensions:
   - admonition
